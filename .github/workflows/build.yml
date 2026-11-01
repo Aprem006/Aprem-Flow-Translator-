@@ -715,4 +715,3 @@ jobs:
           name: LingoFloat v${{ github.run_number }}
           body: "Download LingoFloat.apk below and install it. Indonesian to English on your whole screen."
           files: LingoFloat.apk
-          

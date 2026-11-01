@@ -1,0 +1,718 @@
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Write project files
+        run: |
+          mkdir -p app/src/main/java/com/prem/lingofloat app/src/main/res/layout app/src/main/res/values app/src/main/res/drawable app/src/main/res/drawable-nodpi app/src/main/res/mipmap-anydpi-v26
+          cat > settings.gradle.kts <<'EOF_FILE'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositories { google(); mavenCentral() } }
+          rootProject.name = "LingoFloat"
+          include(":app")
+          EOF_FILE
+          cat > build.gradle.kts <<'EOF_FILE'
+          plugins {
+          id("com.android.application") version "8.5.2" apply false
+          id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+          }
+          EOF_FILE
+          cat > gradle.properties <<'EOF_FILE'
+          org.gradle.jvmargs=-Xmx3g
+          android.useAndroidX=true
+          EOF_FILE
+          cat > app/build.gradle.kts <<'EOF_FILE'
+          plugins {
+          id("com.android.application")
+          id("org.jetbrains.kotlin.android")
+          }
+          android {
+          namespace = "com.prem.lingofloat"
+          compileSdk = 34
+          defaultConfig {
+          applicationId = "com.prem.lingofloat"
+          minSdk = 26
+          targetSdk = 34
+          versionCode = 1
+          versionName = "1.0"
+          ndk { abiFilters += listOf("arm64-v8a") }
+          }
+          signingConfigs {
+          getByName("debug") {
+          val ks = rootProject.file("share.jks")
+          if (ks.exists()) {
+          storeFile = ks
+          storePassword = "lingofloat"
+          keyAlias = "lingo"
+          keyPassword = "lingofloat"
+          }
+          }
+          }
+          compileOptions {
+          sourceCompatibility = JavaVersion.VERSION_17
+          targetCompatibility = JavaVersion.VERSION_17
+          }
+          kotlinOptions { jvmTarget = "17" }
+          }
+          dependencies {
+
+         implementation("androidx.core:core-ktx:1.13.1")
+          implementation("androidx.appcompat:appcompat:1.7.0")
+          implementation("com.google.android.material:material:1.12.0")
+          implementation("com.google.mlkit:text-recognition:16.0.1")
+          implementation("com.google.mlkit:translate:17.0.3")
+          }
+          EOF_FILE
+          cat > app/src/main/AndroidManifest.xml <<'EOF_FILE'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          <uses-permission android:name="android.permission.INTERNET" />
+          <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+          <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+          <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+          <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+          <application
+          android:allowBackup="false"
+          android:icon="@mipmap/ic_launcher"
+          android:roundIcon="@mipmap/ic_launcher"
+          android:label="LingoFloat"
+          android:theme="@style/Theme.LingoFloat">
+          <activity android:name=".MainActivity" android:exported="true">
+          <intent-filter>
+          <action android:name="android.intent.action.MAIN" />
+          <category android:name="android.intent.category.LAUNCHER" />
+          </intent-filter>
+          </activity>
+          <service
+          android:name=".TranslatorService"
+          android:exported="false"
+          android:foregroundServiceType="mediaProjection" />
+          </application>
+          </manifest>
+          EOF_FILE
+          cat > app/src/main/res/values/values.xml <<'EOF_FILE'
+          <resources>
+          <color name="white">#FFFFFF</color>
+          <color name="primary">#9B2D3F</color>
+          <color name="bg">#FBF7F2</color>
+          <color name="ink">#2B2024</color>
+          <color name="sub">#7A6A6A</color>
+          <color name="stroke">#E9DFD6</color>
+          <style name="Theme.LingoFloat" parent="Theme.Material3.Light.NoActionBar">
+          <item name="colorPrimary">@color/primary</item>
+          <item name="colorOnPrimary">@color/white</item>
+          <item name="android:statusBarColor">@color/primary</item>
+          <item
+          name="android:windowLightStatusBar">false</item>
+          <item name="android:windowBackground">@color/bg</item>
+          </style>
+          <style name="CircleImage">
+          <item name="cornerFamily">rounded</item>
+          <item name="cornerSize">50%</item>
+          </style>
+          <style name="BottomRound">
+          <item name="cornerFamily">rounded</item>
+          <item name="cornerSizeTopLeft">0dp</item>
+          <item name="cornerSizeTopRight">0dp</item>
+          <item name="cornerSizeBottomLeft">32dp</item>
+          <item name="cornerSizeBottomRight">32dp</item>
+          </style>
+          </resources>
+          EOF_FILE
+          cat > app/src/main/res/drawable/scrim.xml <<'EOF_FILE'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+          <gradient android:angle="270" android:startColor="#22000000" android:endColor="#D9220B14" />
+          <corners android:bottomLeftRadius="32dp" android:bottomRightRadius="32dp" />
+          </shape>
+          EOF_FILE
+          cat > app/src/main/res/drawable/ic_translate.xml <<'EOF_FILE'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+          <path android:fillColor="#FFFFFF" android:pathData="M12.87,15.07l-2.54,-2.51 0.03,-0.03c1.74,-1.94 2.98,-4.17 3.71,-6.53L17,6L17,4h-7L10,2L8,2v2L1,4v1.99h11.17C11.5,7.92 10.44,9.75 9,11.35 8.07,10.32 7.3,9.19 6.69,8h-2c0.73,1.63 1.73,3.17 2.98,4.56l-5.09,5.02L4,19l5,-5 3.11,3.11 0.76,-2.04zM18.5,10h-2L12,22h2l1.12,-3h4.75L21,22h2l-4.5,-12zM15.88,17l1.62,-4.33L19.12,17h-3.24z" />
+                    </vector>
+          EOF_FILE
+          cat > app/src/main/res/drawable/ic_check_circle.xml <<'EOF_FILE'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+          <path android:fillColor="#2E7D32" android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM10,17l-5,-5 1.41,-1.41L10,14.17l7.59,-7.59L19,8l-9,9z" />
+          </vector>
+          EOF_FILE
+          cat > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml <<'EOF_FILE'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+          <background android:drawable="@color/white" />
+          <foreground>
+          <inset android:drawable="@drawable/logo" android:inset="20%" />
+          </foreground>
+          </adaptive-icon>
+          EOF_FILE
+          cat > app/src/main/res/layout/activity_main.xml <<'EOF_FILE'
+          <?xml version="1.0" encoding="utf-8"?>
+          <ScrollView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/bg" android:fillViewport="true">
+          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+          <FrameLayout android:layout_width="match_parent" android:layout_height="310dp">
+          <com.google.android.material.imageview.ShapeableImageView android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop" android:src="@drawable/banner" app:shapeAppearanceOverlay="@style/BottomRound" />
+          <View android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/scrim" />
+          <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="bottom|center_horizontal" android:orientation="vertical" android:paddingStart="24dp" android:paddingEnd="24dp" android:paddingBottom="28dp">
+          <com.google.android.material.imageview.ShapeableImageView android:layout_width="84dp" android:layout_height="84dp" android:padding="3dp" android:scaleType="centerCrop" android:src="@drawable/logo" app:shapeAppearanceOverlay="@style/CircleImage" app:strokeColor="@color/white" app:strokeWidth="3dp" />
+          <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="LingoFloat" android:textColor="@color/white" android:textSize="30sp" android:textStyle="bold" />
+          <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:gravity="center" android:text="Indonesian \u2192 English, right on your screen" android:textColor="@color/white" android:textSize="15sp" />
+          </LinearLayout>
+          </FrameLayout>
+
+          <com.google.android.material.card.MaterialCardView android:id="@+id/statusCard" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="16dp" app:cardBackgroundColor="@color/white" app:cardCornerRadius="20dp" app:cardElevation="0dp" app:strokeColor="@color/stroke" app:strokeWidth="1dp">
+          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal" android:padding="16dp">
+          <FrameLayout android:layout_width="40dp" android:layout_height="40dp">
+          <ProgressBar android:id="@+id/progress" android:layout_width="28dp" android:layout_height="28dp" android:layout_gravity="center" android:indeterminate="true" />
+          <ImageView android:id="@+id/statusIcon" android:layout_width="32dp" android:layout_height="32dp" android:layout_gravity="center" android:src="@drawable/ic_check_circle" android:visibility="gone" />
+          </FrameLayout>
+          <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="14dp" android:layout_weight="1" android:orientation="vertical">
+          <TextView android:id="@+id/statusTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Getting Indonesian ready..." android:textColor="@color/ink" android:textSize="16sp" android:textStyle="bold" />
+          <TextView android:id="@+id/statusSub" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="One-time download, then it works offline" android:textColor="@color/sub" android:textSize="13sp" />
+          </LinearLayout>
+          </LinearLayout>
+          </com.google.android.material.card.MaterialCardView>
+          <com.google.android.material.button.MaterialButton android:id="@+id/btnStart" android:layout_width="match_parent" android:layout_height="60dp" android:layout_marginStart="16dp" android:layout_marginEnd="16dp" android:text="Start translating" android:textSize="17sp" app:backgroundTint="@color/primary" app:cornerRadius="30dp" app:icon="@drawable/ic_translate" app:iconGravity="textStart" app:iconPadding="10dp" />
+          <com.google.android.material.button.MaterialButton android:id="@+id/btnStop" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginStart="16dp" android:layout_marginTop="10dp" android:layout_marginEnd="16dp" android:text="Stop" android:textColor="@color/primary" app:cornerRadius="26dp" />
+          <com.google.android.material.card.MaterialCardView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_margin="16dp" app:cardBackgroundColor="@color/white" app:cardCornerRadius="20dp" app:cardElevation="0dp" app:strokeColor="@color/stroke" app:strokeWidth="1dp">
+          <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="18dp">
+          <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="How it works" android:textColor="@color/ink" android:textSize="18sp" android:textStyle="bold" />
+          <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:lineSpacingExtra="6dp" android:text="1.  Tap Start and allow the two permissions\n2.  Open any app: comics, chats, websites\n3.  Tap the floating bubble and the Indonesian turns into English\n4.  Tap the translation to close it\n5.  Hold the bubble to stop" android:textColor="@color/ink" android:textSize="15sp" />
+          </LinearLayout>
+          </com.google.android.material.card.MaterialCardView>
+          <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:padding="20dp" android:text="v1.0  \u00B7  Made with \u2665 by Prem" android:textColor="@color/sub" android:textSize="13sp" />
+          </LinearLayout>
+          </ScrollView>
+          EOF_FILE
+          cat > app/src/main/java/com/prem/lingofloat/MainActivity.kt <<'EOF_FILE'
+          package com.prem.lingofloat
+          import android.Manifest
+          import android.app.Activity
+          import android.content.*
+          import android.media.projection.MediaProjectionManager
+          import android.net.Uri
+          import android.os.*
+          import android.provider.Settings
+          import android.view.View
+          import android.widget.*
+          import androidx.activity.result.contract.ActivityResultContracts
+          import androidx.appcompat.app.AppCompatActivity
+          import com.google.mlkit.nl.translate.*
+          class MainActivity : AppCompatActivity() {
+          private lateinit var progress: ProgressBar
+          private lateinit var statusIcon: ImageView
+          private lateinit var statusTitle: TextView
+          private lateinit var statusSub: TextView
+          private val overlayLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+          if (Settings.canDrawOverlays(this)) askCapture()
+          }
+          private val captureLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+          val data = result.data
+          if (result.resultCode == Activity.RESULT_OK && data != null) {
+          startForegroundService(
+          Intent(this, TranslatorService::class.java).putExtra("code", result.resultCode).putExtra("data", data)
+          )
+          moveTaskToBack(true)
+          }
+          }
+          private val notifLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+          override fun onCreate(savedInstanceState: Bundle?) {
+          super.onCreate(savedInstanceState)
+          setContentView(R.layout.activity_main)
+          progress = findViewById(R.id.progress)
+          statusIcon = findViewById(R.id.statusIcon)
+          statusTitle = findViewById(R.id.statusTitle)
+          statusSub = findViewById(R.id.statusSub)
+          findViewById<View>(R.id.btnStart).setOnClickListener { begin() }
+          findViewById<View>(R.id.btnStop).setOnClickListener {
+          startService(Intent(this, TranslatorService::class.java).setAction("STOP"))
+          }
+          findViewById<View>(R.id.statusCard).setOnClickListener {
+          if (progress.visibility != View.VISIBLE && statusIcon.visibility != View.VISIBLE) prepareModel()
+          }
+          if (Build.VERSION.SDK_INT >= 33) notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+          prepareModel()
+          }
+          private fun prepareModel() {
+          progress.visibility = View.VISIBLE
+          statusIcon.visibility = View.GONE
+          statusTitle.text = "Getting Indonesian ready..."
+          statusSub.text = "One-time download, then it works offline"
+          val tr = Translation.getClient(
+          TranslatorOptions.Builder()
+          .setSourceLanguage(TranslateLanguage.INDONESIAN)
+          .setTargetLanguage(TranslateLanguage.ENGLISH)
+          .build()
+          )
+          tr.downloadModelIfNeeded()
+          .addOnSuccessListener {
+          progress.visibility = View.GONE
+          statusIcon.visibility = View.VISIBLE
+          statusTitle.text = "Ready to translate"
+          statusSub.text = "Indonesian \u2192 English works offline"
+          tr.close()
+          }
+          .addOnFailureListener {
+          progress.visibility = View.GONE
+          statusIcon.visibility = View.GONE
+          statusTitle.text = "Download failed"
+          statusSub.text = "Check your internet, then tap here to try again"
+          tr.close()
+          }
+          }
+          private fun begin() {
+          if (!Settings.canDrawOverlays(this)) {
+          overlayLauncher.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+          return
+          }
+          askCapture()
+          }
+          private fun askCapture() {
+          val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+          captureLauncher.launch(mgr.createScreenCaptureIntent())
+          }
+          }
+          EOF_FILE
+          cat > app/src/main/java/com/prem/lingofloat/TranslatorService.kt <<'EOF_FILE'
+          package com.prem.lingofloat
+          import android.app.*
+          import android.content.*
+          import android.content.pm.ServiceInfo
+          import android.graphics.*
+          import android.graphics.drawable.GradientDrawable
+          import android.graphics.drawable.Icon
+          import android.hardware.display.*
+          import android.media.Image
+          import android.media.ImageReader
+          import android.media.projection.*
+          import android.os.*
+          import android.util.*
+          import android.view.*
+          import android.widget.*
+          import com.google.mlkit.nl.translate.*
+          import com.google.mlkit.vision.common.InputImage
+          import com.google.mlkit.vision.text.TextRecognition
+          import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+          import kotlin.math.abs
+          private class Item(val rect: Rect, val src: String, var out: String? = null)
+          class TranslatorService : Service() {
+          private lateinit var wm: WindowManager
+          private val main = Handler(Looper.getMainLooper())
+          private var projection: MediaProjection? = null
+          private var display: VirtualDisplay? = null
+          private var idleReader: ImageReader? = null
+          private var pendingReader: ImageReader? = null
+          private var button: ImageView? = null
+          private var overlay: FrameLayout? = null
+          private var w = 0
+          private var h = 0
+          private var dpi = 0
+          private var busy = false
+          private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+          private var translatorRef: Translator? = null
+          private fun translator(): Translator {
+          val existing = translatorRef
+          if (existing != null) return existing
+          val t = Translation.getClient(
+          TranslatorOptions.Builder()
+          .setSourceLanguage(TranslateLanguage.INDONESIAN)
+          .setTargetLanguage(TranslateLanguage.ENGLISH)
+          .build()
+          )
+          translatorRef = t
+          return t
+          }
+          override fun onBind(intent: Intent?): IBinder? = null
+          override fun onCreate() {
+          super.onCreate()
+          wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+          }
+          @Suppress("DEPRECATION")
+          override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+          if (intent?.action == "STOP") {
+          stopSelf()
+          return START_NOT_STICKY
+          }
+          startAsForeground()
+          if (projection != null) return START_NOT_STICKY
+          val code = intent?.getIntExtra("code", 0) ?: 0
+          val data: Intent? = if (Build.VERSION.SDK_INT >= 33) {
+          intent?.getParcelableExtra("data", Intent::class.java)
+          } else {
+          intent?.getParcelableExtra("data")
+          }
+          if (data == null) {
+          stopSelf()
+          return START_NOT_STICKY
+          }
+          val m = DisplayMetrics()
+          wm.defaultDisplay.getRealMetrics(m)
+          w = m.widthPixels
+          h = m.heightPixels
+          dpi = m.densityDpi
+          try {
+          startCapture(code, data)
+          } catch (e: Exception) {
+          toast("Couldn't start: ${e.message}")
+          stopSelf()
+          return START_NOT_STICKY
+          }
+          addButton()
+          toast("LingoFloat is on. Tap the bubble to translate")
+          return START_NOT_STICKY
+          }
+          private fun startAsForeground() {
+          val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+          nm.createNotificationChannel(NotificationChannel("lingo", "LingoFloat", NotificationManager.IMPORTANCE_LOW))
+          val stopIntent = PendingIntent.getService(
+          this, 0, Intent(this, TranslatorService::class.java).setAction("STOP"), PendingIntent.FLAG_IMMUTABLE
+          )
+          val stopAction = Notification.Action.Builder(
+          Icon.createWithResource(this, android.R.drawable.ic_delete), "Stop", stopIntent
+          ).build()
+          val n = Notification.Builder(this, "lingo")
+          .setContentTitle("LingoFloat is on")
+          .setContentText("Tap the floating bubble to translate your screen")
+          .setSmallIcon(R.drawable.ic_translate)
+          .addAction(stopAction)
+          .build()
+          if (Build.VERSION.SDK_INT >= 29) {
+          startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+          } else {
+          startForeground(1, n)
+          }
+          }
+          private fun startCapture(code: Int, data: Intent) {
+          val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+          val p = mgr.getMediaProjection(code, data)
+          p.registerCallback(object : MediaProjection.Callback() {
+          override fun onStop() {
+          main.post { stopSelf() }
+          }
+          }, main)
+          projection = p
+          val idle = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2)
+          idle.setOnImageAvailableListener({ r -> r.acquireLatestImage()?.close() }, main)
+          idleReader = idle
+          display = p.createVirtualDisplay(
+          "lingofloat", w, h, dpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, idle.surface, null, null
+          )
+          }
+          private fun addButton() {
+          val size = dp(54)
+          val iv = ImageView(this)
+          iv.setImageResource(R.drawable.ic_translate)
+          iv.setPadding(dp(14), dp(14), dp(14), dp(14))
+          val bubble = GradientDrawable(
+          GradientDrawable.Orientation.TL_BR,
+          intArrayOf(0xFF9B2D3F.toInt(), 0xFFC9A66B.toInt())
+          )
+          bubble.shape = GradientDrawable.OVAL
+          bubble.setStroke(dp(2), 0xFFFFFFFF.toInt())
+          iv.background = bubble
+          val lp = WindowManager.LayoutParams(
+          size, size, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+          WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+          PixelFormat.TRANSLUCENT
+          )
+          lp.gravity = Gravity.TOP or Gravity.START
+          lp.x = dp(12)
+          lp.y = dp(240)
+          var sx = 0f
+          var sy = 0f
+          var ox = 0
+          var oy = 0
+          var moved = false
+          var downTime = 0L
+          iv.setOnTouchListener { v, e ->
+          when (e.action) {
+          MotionEvent.ACTION_DOWN -> {
+          sx = e.rawX
+          sy = e.rawY
+          ox = lp.x
+          oy = lp.y
+          moved = false
+          downTime = e.eventTime
+          true
+          }
+          MotionEvent.ACTION_MOVE -> {
+          val dx = (e.rawX - sx).toInt()
+          val dy = (e.rawY - sy).toInt()
+          if (abs(dx) > 12 || abs(dy) > 12) moved = true
+          if (moved) {
+          lp.x = ox + dx
+          lp.y = oy + dy
+          wm.updateViewLayout(v, lp)
+          }
+          true
+          }
+          MotionEvent.ACTION_UP -> {
+          if (!moved) {
+          if (e.eventTime - downTime > 800) stopSelf() else capture()
+          }
+          true
+          }
+          else -> false
+          }
+          }
+          wm.addView(iv, lp)
+          button = iv
+          }
+          private fun capture() {
+          if (busy) return
+          busy = true
+          removeOverlay()
+          button?.visibility = View.INVISIBLE
+          main.postDelayed({
+          val reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2)
+          pendingReader = reader
+          reader.setOnImageAvailableListener({ r ->
+          val img = r.acquireLatestImage() ?: return@setOnImageAvailableListener
+          val bmp = try {
+          toBitmap(img)
+          } finally {
+          img.close()
+          }
+          finishCapture(reader)
+          button?.alpha = 0.5f
+          recognize(bmp)
+          }, main)
+          display?.surface = reader.surface
+          main.postDelayed({
+          if (pendingReader === reader) {
+          finishCapture(reader)
+          toast("Couldn't capture the screen, try again")
+          done()
+          }
+          }, 3000)
+          }, 250)
+          }
+          private fun finishCapture(reader: ImageReader) {
+          pendingReader = null
+          reader.setOnImageAvailableListener(null, null)
+          display?.surface = idleReader?.surface
+          reader.close()
+          button?.visibility = View.VISIBLE
+          }
+          private fun done() {
+          busy = false
+          button?.alpha = 1f
+          }
+          private fun toBitmap(img: Image): Bitmap {
+          val p = img.planes[0]
+          val rowPadding = p.rowStride - p.pixelStride * w
+          val wide = Bitmap.createBitmap(w + rowPadding / p.pixelStride, h, Bitmap.Config.ARGB_8888)
+          wide.copyPixelsFromBuffer(p.buffer)
+          return Bitmap.createBitmap(wide, 0, 0, w, h)
+          }
+          private fun recognize(bmp: Bitmap) {
+          recognizer.process(InputImage.fromBitmap(bmp, 0))
+          .addOnSuccessListener { t ->
+          val items = ArrayList<Item>()
+          for (b in t.textBlocks) {
+          val r = b.boundingBox ?: continue
+          val c = clean(b.text)
+          if (!worthIt(c)) continue
+          items.add(Item(r, c))
+          }
+          if (items.isEmpty()) {
+          toast("No text found on screen")
+          done()
+          return@addOnSuccessListener
+          }
+          translator().downloadModelIfNeeded()
+          .addOnSuccessListener {
+          var left = items.size
+          for (item in items) {
+          translator().translate(item.src)
+          .addOnSuccessListener { res -> item.out = res }
+          .addOnCompleteListener {
+          left--
+          if (left == 0) showOverlay(bmp, items)
+          }
+          }
+          }
+          .addOnFailureListener {
+          toast("Open LingoFloat once with internet to get the Indonesian pack")
+          done()
+          }
+          }
+          .addOnFailureListener {
+          toast("Couldn't read the screen")
+          done()
+          }
+          }
+          // Join a bubble's lines into one sentence and fix ALL CAPS so the translator gets clean text.
+          private fun clean(raw: String): String {
+          var s = raw.replace("\n", " ").replace(Regex("\\s+"), " ").trim()
+          s = s.replace(Regex("(?<=\\p{L})-\\s+(?=\\p{L})"), "-")
+          val letters = s.count { it.isLetter() }
+          val upper = s.count { it.isUpperCase() }
+          if (letters >= 3 && upper * 10 > letters * 6) s = sentenceCase(s)
+          return s
+          }
+          private fun sentenceCase(s: String): String {
+          val sb = StringBuilder()
+          var cap = true
+          for (c in s.lowercase()) {
+          if (cap && c.isLetter()) {
+          sb.append(c.uppercaseChar())
+          cap = false
+          } else {
+          sb.append(c)
+          }
+          if (c == '.' || c == '!' || c == '?') cap = true
+          }
+          return sb.toString()
+          }
+          // Skip clocks, battery, page numbers and other non-text noise.
+          private fun worthIt(s: String): Boolean {
+          val letters = s.count { it.isLetter() }
+          val chars = s.count { !it.isWhitespace() }
+          if (letters < 2 || chars == 0) return false
+          return letters.toFloat() / chars.toFloat() >= 0.5f
+          }
+          private fun sampleBg(bmp: Bitmap, r: Rect): Int {
+          val xs = intArrayOf(r.left + 3, (r.left + r.right) / 2, r.right - 3)
+          val ys = intArrayOf(r.top + 3, (r.top + r.bottom) / 2, r.bottom - 3)
+          var rr = 0
+          var gg = 0
+          var bb = 0
+          var n = 0
+          for (xi in xs.indices) {
+          for (yi in ys.indices) {
+          if (xi == 1 && yi == 1) continue
+          val px = bmp.getPixel(xs[xi].coerceIn(0, bmp.width - 1), ys[yi].coerceIn(0, bmp.height - 1))
+          rr += Color.red(px)
+          gg += Color.green(px)
+          bb += Color.blue(px)
+          n++
+          }
+          }
+          return Color.rgb(rr / n, gg / n, bb / n)
+          }
+          private fun showOverlay(bmp: Bitmap, items: List<Item>) {
+          val root = FrameLayout(this)
+          var count = 0
+          for (item in items) {
+          val out = item.out ?: continue
+          if (out.trim().equals(item.src.trim(), ignoreCase = true)) continue
+          val r = item.rect
+          val pad = dp(4)
+          val left = (r.left - pad).coerceIn(0, w - 1)
+          val top = (r.top - pad).coerceIn(0, h - 1)
+          val bw = (r.width() + pad * 2).coerceAtMost(w - left).coerceAtLeast(dp(24))
+          val bh = (r.height() + pad * 2).coerceAtMost(h - top).coerceAtLeast(dp(16))
+          val bg = sampleBg(bmp, r)
+          val lum = (Color.red(bg) * 299 + Color.green(bg) * 587 + Color.blue(bg) * 114) / 1000
+          val tv = TextView(this)
+          tv.text = out
+          val box = GradientDrawable()
+          box.setColor(bg)
+          box.cornerRadius = dp(8).toFloat()
+          tv.background = box
+          tv.setTextColor(if (lum > 140) Color.BLACK else Color.WHITE)
+          tv.gravity = Gravity.CENTER
+          tv.setPadding(dp(3), dp(1), dp(3), dp(1))
+          tv.includeFontPadding = false
+          tv.setAutoSizeTextTypeUniformWithConfiguration(7, 22, 1, TypedValue.COMPLEX_UNIT_SP)
+          val lp = FrameLayout.LayoutParams(bw, bh)
+          lp.leftMargin = left
+          lp.topMargin = top
+          root.addView(tv, lp)
+          count++
+          }
+          if (count == 0) {
+          toast("Nothing to translate here")
+          done()
+          return
+          }
+          root.setOnClickListener { removeOverlay() }
+          val params = WindowManager.LayoutParams(
+          ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+          WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+          WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+          WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+          WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+          PixelFormat.TRANSLUCENT
+          )
+          params.gravity = Gravity.TOP or Gravity.START
+          if (Build.VERSION.SDK_INT >= 28) {
+          params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+          }
+          wm.addView(root, params)
+          overlay = root
+          done()
+          }
+          private fun removeOverlay() {
+          overlay?.let {
+          try {
+          wm.removeView(it)
+          } catch (_: Exception) {
+          }
+          }
+          overlay = null
+          }
+          private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+          private fun toast(msg: String) {
+          Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+          }
+          override fun onDestroy() {
+          removeOverlay()
+          button?.let {
+          try {
+          wm.removeView(it)
+          } catch (_: Exception) {
+          }
+          }
+          button = null
+          display?.release()
+          idleReader?.close()
+          projection?.stop()
+          recognizer.close()
+          translatorRef?.close()
+          super.onDestroy()
+          }
+          }
+          EOF_FILE
+
+      - name: Add logo, banner and signing key
+        run: |
+        cp logo.png banner.jpg app/src/main/res/drawable-nodpi/
+          echo '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' | base64 -d > share.jks
+
+      - name: Build
+        run: gradle assembleDebug --stacktrace
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk LingoFloat.apk
+
+      - name: Publish APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: lingofloat-${{ github.run_number }}
+          name: LingoFloat v${{ github.run_number }}
+          body: "Download LingoFloat.apk below and install it. Indonesian to English on your whole screen."
+          files: LingoFloat.apk
+          
